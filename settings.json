@@ -1,6 +1,7 @@
 {
     "host": "127.0.0.1",
     "port": 7878,
-    "templates_dir": "../templates"
+    "templates_dir": "../templates",
+    "static_dir": "../static"
 }
 

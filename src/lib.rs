@@ -2,11 +2,12 @@ use std::fs;
 use serde::Deserialize;
 
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct Settings {
     pub host: String,
     pub port: u16,
     pub templates_dir: String,
+    pub static_dir: String,
 }
 
 impl Settings {
