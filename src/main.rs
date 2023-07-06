@@ -5,10 +5,12 @@ use futures::stream::StreamExt;
 use ferropress::Settings;
 use async_std::task::spawn;
 use async_std::fs;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use log::info;
+use std::collections::HashMap;
 
 
+type ContentCache = Arc<Mutex<HashMap<String, Vec<u8>>>>;
 
 #[derive(Debug)]
 struct Request {
@@ -147,8 +149,9 @@ async fn test_view() -> Response {
     Response{status: HttpStatus::HttpOk(200), contents, headers: None}
 }
 
-async fn index_view() -> Response {
-    let contents = fs::read("./templates/index.html").await.unwrap();
+async fn index_view(cache: ContentCache) -> Response {
+    let contents = cache.lock().unwrap().get("./templates/index.html").unwrap().clone();
+    // let contents = fs::read("./templates/index.html").await.unwrap();
     let headers = Some(Vec::from([HttpHeader::ContentType(HttpContentType::Html)]));
     Response{status: HttpStatus::HttpOk(200), contents, headers} 
 }
@@ -166,10 +169,10 @@ async fn resource_view(path: &str) -> Response {
     Response{status: HttpStatus::HttpOk(200), contents, headers}
 }
 
-async fn route(request: Request) -> Response {
+async fn route(request: Request, settings: Arc<Settings>, cache: ContentCache) -> Response {
     match &request.path[..] {
         "/test" => test_view().await,
-        "/" => index_view().await,
+        "/" => index_view(cache).await,
         _ => resource_view(&request.path).await,
     }
 }
@@ -182,7 +185,11 @@ async fn main() {
     let settings = Arc::new(Settings::load_from_file(SETTINGS_FILE_PATH).expect("failed to load settings module; exiting!"));
     info!("Starting server!");
     info!("{:?}", *settings);
-    
+
+    let mut content_cache = HashMap::new();
+    content_cache.insert(String::from("./templates/index.html"), fs::read("./templates/index.html").await.unwrap());
+    let content_cache = Arc::new(Mutex::new(content_cache));
+
     
     let host = format!("{}:{}", settings.host, settings.port);
     println!("Listening on {}", host);
@@ -191,18 +198,19 @@ async fn main() {
         .incoming()
         .for_each_concurrent(None, move |tcpstream| {
             let settings = Arc::clone(&settings);
+            let content_cache = Arc::clone(&content_cache);
             async move {
                 let tcpstream = tcpstream.unwrap();
-                spawn(handle_connection(tcpstream, settings));
+                spawn(handle_connection(tcpstream, settings, content_cache));
             }
         }).await;
 }
 
-async fn handle_connection(mut stream: TcpStream, _settings: Arc<Settings>) {
+async fn handle_connection(mut stream: TcpStream, settings: Arc<Settings>, cache: ContentCache) {
     let request = Request::from_stream(&stream).await;
     info!("{:?}", request);
 
-    let response = route(request).await.fmt_as_bytes();
+    let response = route(request, settings, cache).await.fmt_as_bytes();
 
     stream.write_all(&response[..]).await.unwrap();
     stream.flush().await.unwrap();
