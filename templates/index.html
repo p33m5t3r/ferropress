@@ -5,8 +5,16 @@
             ferropress
         </title>
     </head>
+
+    <!--
+        context: {"items": [{"name": "foo", "pinned": "False"}, {"name": "bar"}]}
+    -->
     
     <body>
         <p> hello from ferropress! </p>
+        <ul>
+            <li> {{ expr }} </li>
+            <li> item 2 </li>
+        </ul>
     </body>
 </html>
